@@ -68,9 +68,40 @@
         <p>Currently served by EC2 instance with Private IP:</p>
         <div class="ip-display">
             <?php
-                // Fetch EC2 local IPv4
-                $ip = @file_get_contents("http://169.254.169.254/latest/meta-data/local-ipv4");
-                echo $ip ? htmlspecialchars($ip) : "Unable to fetch IP";
+                // Function to get EC2 metadata using IMDSv2
+                function getEC2Metadata($path) {
+                    $token_url = "http://169.254.169.254/latest/api/token";
+                    $ch = curl_init($token_url);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, array('X-aws-ec2-metadata-token-ttl-seconds: 21600'));
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+                    $token = curl_exec($ch);
+                    curl_close($ch);
+                    
+                    if (!$token) {
+                        return false;
+                    }
+                    
+                    $metadata_url = "http://169.254.169.254/latest/meta-data/" . $path;
+                    $ch = curl_init($metadata_url);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, array('X-aws-ec2-metadata-token: ' . $token));
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+                    $result = curl_exec($ch);
+                    curl_close($ch);
+                    
+                    return $result;
+                }
+                
+                $ip = getEC2Metadata("local-ipv4");
+                
+                // Fallback to hostname if metadata fails
+                if (!$ip) {
+                    $ip = gethostname() . " (using hostname)";
+                }
+                
+                echo htmlspecialchars($ip);
             ?>
         </div>
         <p class="footer-note">Traffic is being routed by an AWS Application Load Balancer (ALB).</p>
